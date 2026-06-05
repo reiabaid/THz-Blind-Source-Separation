@@ -37,7 +37,7 @@ def plot_waveforms_overlay(
     for i in range(n_angles):
         ax.plot(time_axis, waveforms[:, i], color=cmap(norm(angles[i])), lw=0.8, alpha=0.85)
 
-    sm = cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])
     cbar = fig.colorbar(sm, ax=ax)
     cbar.set_label("Polarization angle (deg)")
