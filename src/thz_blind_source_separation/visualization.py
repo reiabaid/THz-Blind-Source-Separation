@@ -4,7 +4,6 @@ from pathlib import Path
 
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 
 
@@ -31,7 +30,7 @@ def plot_waveforms_overlay(
     if angles is None:
         angles = np.arange(n_angles, dtype=float)
 
-    cmap = cm.get_cmap("coolwarm", n_angles)
+    cmap = plt.colormaps["coolwarm"].resampled(n_angles)
     norm = mcolors.Normalize(vmin=float(angles[0]), vmax=float(angles[-1]))
 
     fig, ax = plt.subplots(figsize=(10, 5))
