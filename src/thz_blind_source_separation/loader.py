@@ -79,8 +79,6 @@ def load_thz_sweep(
     resolved_delimiter = _infer_delimiter(path, delimiter)
     table = _load_numeric_table(path, resolved_delimiter, skip_header)
 
-    if table.ndim != 2:
-        raise THZLoadError(f"Expected a 2D table in '{path}', got shape {table.shape}.")
     if table.shape[1] < 2:
         raise THZLoadError(
             f"Loaded data from '{path}' must have at least 2 columns, got {table.shape[1]}."
@@ -91,7 +89,22 @@ def load_thz_sweep(
             raise THZLoadError(
                 f"time_column={time_column} is out of bounds for data with {table.shape[1]} columns."
             )
-        waveform_columns = tuple(index for index in range(table.shape[1]) if index != time_column)
+        waveform_columns = [i for i in range(table.shape[1]) if i != time_column]
+    else:
+        # Validate user-supplied column indices
+        n_cols = table.shape[1]
+        bad = [c for c in waveform_columns if c < 0 or c >= n_cols]
+        if bad:
+            raise THZLoadError(
+                f"waveform_columns contains out-of-range indices {bad} "
+                f"for data with {n_cols} columns."
+            )
+        overlap = [c for c in waveform_columns if c == time_column]
+        if overlap:
+            raise THZLoadError(
+                f"waveform_columns {list(waveform_columns)} overlaps with "
+                f"time_column={time_column}."
+            )
 
     time_axis = np.asarray(table[:, time_column], dtype=float)
     waveform_matrix = np.asarray(table[:, waveform_columns], dtype=float)
