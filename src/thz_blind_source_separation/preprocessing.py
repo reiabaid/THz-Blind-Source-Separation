@@ -62,7 +62,7 @@ def preprocess_waveforms(
         return cleaned
 
     normal_cutoff = cutoff_hz / nyq
-    b, a = butter(filter_order, normal_cutoff, btype="low", analog=False)
+    b, a = butter(filter_order, normal_cutoff, btype="low", analog=False, output="ba")  # type: ignore[misc]
     filtered = filtfilt(b, a, cleaned, axis=0)
 
     return filtered
