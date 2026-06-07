@@ -40,14 +40,15 @@ def preprocess_waveforms(
     baseline = np.mean(cleaned[:n_baseline, :], axis=0)
     cleaned = cleaned - baseline[np.newaxis, :]
 
-    # Normalization
-    peaks = np.max(np.abs(cleaned), axis=0)
-    peaks[peaks == 0] = 1.0
-    cleaned = cleaned / peaks[np.newaxis, :]
+    # Global normalization — preserves relative amplitudes across angles
+    global_peak = np.max(np.abs(cleaned))
+    if global_peak == 0.0:
+        global_peak = 1.0
+    cleaned = cleaned / global_peak
 
     # Low-pass filtering using scipy.signal
     try:
-        from scipy.signal import butter, filtfilt
+        from scipy.signal import butter, sosfiltfilt
     except Exception as exc:  # pragma: no cover - environment issues
         raise RuntimeError(
             "scipy is required for filtering; install scipy (pip install scipy)"
@@ -62,7 +63,7 @@ def preprocess_waveforms(
         return cleaned
 
     normal_cutoff = cutoff_hz / nyq
-    b, a = butter(filter_order, normal_cutoff, btype="low", analog=False, output="ba")  # type: ignore[misc]
-    filtered = filtfilt(b, a, cleaned, axis=0)
+    sos = butter(filter_order, normal_cutoff, btype="low", analog=False, output="sos")
+    filtered = sosfiltfilt(sos, cleaned, axis=0)
 
     return filtered
