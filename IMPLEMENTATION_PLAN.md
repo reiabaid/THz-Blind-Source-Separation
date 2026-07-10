@@ -57,7 +57,7 @@ where:
 | Magnetic field B (T) | `A(B) = A₀ · (1 + g_A · B)` | `Δτ(B) = φ_B · B` (Faraday rotation proxy) |
 | Temperature T (K) | `A(T) = A₀ · exp(−γ · T)` | `Δτ(T) = τ_T · (T / T_ref)` |
 
-These are physically motivated approximations — exact functional forms can be refined later when real data arrives.
+> **These forms are illustrative placeholders, not derived physics.** They are not confirmed against literature or the advisor's setup. Phase 1 of implementation should treat them as freely swappable: start with simple, clearly-systematic laws (e.g. linear or sinusoidal vs. a normalized 0–1 parameter) to validate that the recovery pipeline works mechanically at all, then substitute physically-grounded forms once available (see Open Question 5).
 
 ### Steps
 
@@ -97,6 +97,8 @@ Feed the model **raw waveforms only** (no amplitude or phase labels) and train i
 
 > **Recommended starting point:** Option B (SVD/PCA) as a baseline, then Option C (Autoencoder) for the main model, because the advisor wants the model to find the structure without being given the labels.
 
+> **Go/no-go gate:** Before investing in the autoencoder, run the SVD/PCA baseline on the Stage 1 dataset and check whether the top 2 singular vectors already separate amplitude from phase. If they don't show any separation, treat that as a signal to revisit the Stage 1 functional forms or parameter grid before spending time on Stage 2's main model.
+
 ### Steps
 
 1. **`src/thz_blind_source_separation/bss.py`** — new file
@@ -108,6 +110,7 @@ Feed the model **raw waveforms only** (no amplitude or phase labels) and train i
    - **Encoder**: maps a single waveform (length T) → latent vector of dimension 2 (one for amplitude, one for phase, by design pressure or unsupervised)
    - **Decoder**: maps latent vector back to waveform
    - Loss: mean-squared reconstruction error
+   - `latent_dim` should be a constructor argument, defaulting to **2** (the strongest test of the advisor's hypothesis). If reconstruction loss stays high, widen to e.g. 8 and re-run without rewriting the training script (see Open Question 1).
 
 3. **`scripts/train_model.py`** — training script
    - Load `data/synthetic_parametric.npz`
@@ -200,6 +203,8 @@ THz-Blind-Source-Separation/
 | `pandas` | Parameter grid management | 1 |
 | `seaborn` | Heatmap visualizations | 3 |
 
+> `torch` is a heavy dependency for a 1-D autoencoder on a few thousand short waveforms. Revisit after Stage 1 fixes the dataset size — a lighter option (`scikit-learn`'s `MLPRegressor`, or a hand-rolled NumPy autoencoder) may suffice, especially without GPU access.
+
 ---
 
 ## Execution Order
@@ -229,12 +234,34 @@ Step 9  Write up results — does recovered latent space match injected A(p), τ
 
 ## Open Questions / Decisions Needed
 
-1. **Latent dimension**: Should the autoencoder bottleneck be forced to dim=2 (explicit amplitude + phase), or should we let it be larger (e.g., 8) and do post-hoc analysis? A dim=2 bottleneck is cleaner for interpretation but may hurt reconstruction if the signal has more complexity.
+1. **Latent dimension** — *default set:* `latent_dim=2`, exposed as a parameter so it can be widened (e.g., 8) if reconstruction loss stays high. Revisit once real training-loss numbers exist.
 
-2. **Model framework**: Use PyTorch (more flexible, heavier dependency) or stick to NumPy/SciPy only (lighter, less expressive)? This affects what can be done with limited lab compute.
+2. **Model framework**: Use PyTorch (more flexible, heavier dependency) or stick to NumPy/SciPy only (lighter, less expressive)? This affects what can be done with limited lab compute. Lean towards deciding this after Stage 1 dataset size is known (see Dependencies note above).
 
 3. **Noise level**: Should noise be kept at 5% (current default) or increased to stress-test the BSS recovery?
 
 4. **Parameter grid resolution**: How fine should the grid be? Finer = better training data but larger files and longer compute. A 36×10×10 grid (~3600 waveforms) is a reasonable starting point.
 
-5. **Physical functional forms**: The amplitude/phase laws in the table above are approximate. If you have references for more precise forms (e.g., from the Faraday angle formula), those should be plugged in.
+5. **Physical functional forms** — *default set:* treat Stage 1's table as placeholders (see note under Stage 1). Start with simple systematic laws to validate the pipeline; swap in physically-grounded forms (e.g., real Faraday angle formula) once available from the advisor or literature.
+
+---
+
+## Team & Division of Work (2 people)
+
+The stages are sequential (Stage 2/3 need Stage 1's output), so the split below is by **track**, not by stage, to let both people work in parallel once a small pilot dataset exists.
+
+### Person A — Data & Physics Track
+- **Stage 1, full**: `synthetic_parametric.py`, `generate_parametric_dataset.py`, ground-truth `A_true`/`tau_true` storage, visualization sanity checks
+- Resolves Open Questions 3, 4, 5 (noise level, grid resolution, functional forms) — ideally in consultation with the advisor
+- **First deliverable should be a small pilot dataset** (e.g. one parameter, ~10–20 waveforms) pushed early so Person B is not blocked waiting for the full 3600-waveform grid
+- **Stage 3, physics half**: functional curve fitting (`fit_functional_form`, comparing fitted constants like `g_A`, `φ_B`, `γ` against injected ground truth)
+
+### Person B — Model & Evaluation Track
+- **Stage 2, full**: `bss.py` (SVD/ICA baseline), the go/no-go PCA check, `autoencoder.py`, `train_model.py`, `run_bss.py`
+- Resolves Open Questions 1, 2 (latent dimension, framework choice) based on empirical results against Person A's pilot dataset
+- **Stage 3, evaluation half**: `evaluate_model.py`, `evaluation.py` (`compute_recovery_metrics`), scatter plots, correlation coefficients, `recovery_error_heatmap.png`
+
+### Shared / sync points
+- Both agree on the `.npz` schema (`X`, `time_axis`, `params`, `A_true`, `tau_true`) before Person A starts Stage 1, so Person B can build against the interface without waiting
+- Sync after the go/no-go PCA check — if amplitude/phase don't separate, both revisit Stage 1 assumptions together before Person B invests in the autoencoder
+- Final Stage 3 write-up (Step 9 in Execution Order) is joint — physics interpretation (Person A) + recovery metrics (Person B)
